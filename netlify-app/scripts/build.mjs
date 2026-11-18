@@ -13,6 +13,8 @@ html=html.replace('Entre com a conta da organização.','Entre com seu usuário 
 html=html.replace('async function adminLogout() { location.href=\'/\'; }',"async function adminLogout() { const response=await fetch('/api/auth/logout',{method:'POST'}); if(response.ok) location.href='/acesso'; }");
 html=html.replace('>Voltar ao evento</button></div>','>Sair</button></div>');
 html=html.replace('location.pathname === "/organizacao" || new URLSearchParams(location.search).get("admin") === "1"','location.pathname.replace(/\\/$/, "") === "/organizacao"');
+html=html.replace('</body>','<script src="/organizer-requests.js" defer></script></body>');
+await cp('organizer-requests.js','dist/organizer-requests.js');
 await writeFile('generated/document.mjs','export const eventDocument = '+JSON.stringify(html)+';\n');
 await writeFile('dist/index.html',html);
 await cp('login.html','dist/acesso.html');
