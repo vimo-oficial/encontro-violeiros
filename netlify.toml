@@ -1,6 +1,6 @@
 [build]
   base = "netlify-app"
-  command = "npm run build"
+   command = "npm ci --include=dev && npm run build"
   publish = "dist"
   functions = "functions"
 
@@ -10,6 +10,7 @@
 [functions]
   node_bundler = "esbuild"
   external_node_modules = ["@libsql/client"]
+included_files = ["node_modules/**"]
 [[redirects]]
   from = "/acesso"
   to = "/acesso.html"
