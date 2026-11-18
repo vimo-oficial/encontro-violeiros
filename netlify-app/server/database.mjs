@@ -1,9 +1,9 @@
-let database;
+import { createClient } from '@libsql/client/http';let database;
 export function setDatabaseForTests(value) { database = value; }
 export async function client() {
   if (!database) {
     if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) throw new Error('Configure o banco de dados.');
-    const { createClient } = await import('@libsql/client/http');
+    
     database = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN, intMode: 'number' });
   }
   return database;
