@@ -72,3 +72,37 @@ test('arte oficial e páginas públicas sem link administrativo',async()=>{
   const html=await readFile('dist/index.html','utf8');assert.match(html,/encontro-oficial.jpeg/);assert.ok(!html.includes('id="adminLink"'));assert.ok(!html.includes('signin-with-chatgpt'));
   const attendance=await readFile('dist/attendance.js','utf8');assert.match(attendance,/5/);assert.match(attendance,/fullscreen|tel[aã]o|stage/i);
 });
+
+test('cadastro de organizadores exige seis dígitos e aprovação exclusiva do proprietário',async()=>{
+  const {activeSession}=await import('../server/auth.mjs');
+  const event=(await import('../functions/event.mjs')).default;
+  process.env.ADMIN_USERS_JSON=JSON.stringify([{username:'juliocnovais',passwordHash:passwordHash('654321')}]);
+  const auth=(path,method='GET',body,cookie='')=>authentication(request('/api/auth/'+path,method,body,cookie),{ip:'10.20.30.40'});
+  for(const password of ['12345','1234567','abc123'])assert.equal((await auth('register','POST',{username:'invalido'+password.length,password})).status,400);
+  assert.equal((await auth('register','POST',{username:'juliocnovais',password:'111111'})).status,409);
+  assert.equal((await auth('register','POST',{username:'recepcao.teste',password:'012345'})).status,201);
+  assert.equal((await auth('register','POST',{username:'recepcao.teste',password:'987654'})).status,409);
+  assert.notEqual(sql.prepare('SELECT password_hash FROM organizer_accounts WHERE username=?').get('recepcao.teste').password_hash,'012345');
+  assert.equal((await auth('login','POST',{username:'recepcao.teste',password:'012345'})).status,403);
+  assert.equal((await auth('organizers')).status,401);
+  const login=await auth('login','POST',{username:'juliocnovais',password:'654321'});
+  assert.equal(login.status,200);const ownerCookie=login.headers.get('set-cookie').split(';')[0];
+  const pending=await auth('organizers','GET',undefined,ownerCookie);const rows=await pending.json();assert.equal(rows.length,1);assert.ok(!JSON.stringify(rows).includes('password'));
+  assert.equal((await auth('organizers','PATCH',{username:'recepcao.teste',status:'approved'},ownerCookie)).status,200);
+  assert.equal((await auth('organizers','PATCH',{username:'recepcao.teste',status:'rejected'},ownerCookie)).status,409);
+  const approved=await auth('login','POST',{username:'recepcao.teste',password:'012345'});assert.equal(approved.status,200);
+  const cookie=approved.headers.get('set-cookie').split(';')[0];
+  assert.equal((await activeSession(request('/', 'GET',undefined,cookie))).owner,false);
+  assert.equal((await organizers(request('/organizacao','GET',undefined,cookie))).status,200);
+  assert.equal((await event(request('/api/event/registrations','GET',undefined,cookie),{ip:'10.20.30.40'})).status,200);
+  assert.equal((await auth('organizers','GET',undefined,cookie)).status,403);
+  assert.equal((await auth('organizers','PATCH',{username:'juliocnovais',status:'approved'},cookie)).status,403);
+  assert.equal((await auth('register','POST',{username:'recusado.teste',password:'111222'})).status,201);
+  assert.equal((await auth('organizers','PATCH',{username:'recusado.teste',status:'rejected'},ownerCookie)).status,200);
+  assert.equal((await auth('login','POST',{username:'recusado.teste',password:'111222'})).status,403);
+  // A conta deixa de entrar imediatamente se o estado for alterado no banco.
+  sql.prepare("UPDATE organizer_accounts SET status='rejected' WHERE username=?").run('recepcao.teste');
+  assert.equal(await activeSession(request('/','GET',undefined,cookie)),null);
+  assert.equal((await event(request('/api/event/registrations','GET',undefined,cookie),{ip:'10.20.30.40'})).status,401);
+  assert.equal((await organizers(request('/organizacao','GET',undefined,cookie))).status,302);
+});
