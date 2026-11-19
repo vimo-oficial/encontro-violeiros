@@ -13,6 +13,17 @@ html=html.replace('Entre com a conta da organização.','Entre com seu usuário 
 html=html.replace('async function adminLogout() { location.href=\'/\'; }',"async function adminLogout() { const response=await fetch('/api/auth/logout',{method:'POST'}); if(response.ok) location.href='/acesso'; }");
 html=html.replace('>Voltar ao evento</button></div>','>Sair</button></div>');
 html=html.replace('location.pathname === "/organizacao" || new URLSearchParams(location.search).get("admin") === "1"','location.pathname.replace(/\\/$/, "") === "/organizacao"');
+const registrationLoader='async function loadAdminRegistrations() { adminCache = await fetchAdminRegistrations(); renderAdmin(); }';
+if(!html.includes(registrationLoader))throw new Error('Ponto de atualização das inscrições não encontrado.');
+html=html.replace(registrationLoader,`async function loadAdminRegistrations() { adminCache = await fetchAdminRegistrations(); renderAdmin(); document.dispatchEvent(new CustomEvent('violeiros:registrations-updated',{detail:adminCache})); }
+  let refreshingPendingRegistrations=false;
+  document.addEventListener('violeiros:refresh-registrations',async()=>{
+    if(refreshingPendingRegistrations)return;
+    refreshingPendingRegistrations=true;
+    try { await loadAdminRegistrations(); }
+    catch { document.dispatchEvent(new CustomEvent('violeiros:registrations-error')); }
+    finally { refreshingPendingRegistrations=false; }
+  });`);
 html=html.replace('</body>','<script src="/organizer-requests.js" defer></script></body>');
 await cp('organizer-requests.js','dist/organizer-requests.js');
 await writeFile('generated/document.mjs','export const eventDocument = '+JSON.stringify(html)+';\n');
@@ -25,3 +36,4 @@ api=api.replace("const db=()=>{if(!env.DB)throw new Error('Database unavailable'
 api=api.replace('async function handle(request:Request){',"async function handle(request:Request){\n  if(['POST','PATCH','DELETE'].includes(request.method) && !sameOrigin(request)) throw new HttpError(403,'Origem não autorizada.');");
 await writeFile('generated/event-api.mjs',ts.transpileModule(api,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText);
 console.log('Netlify: páginas, APIs e painel protegido preparados.');
+
